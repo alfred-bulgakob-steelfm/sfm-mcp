@@ -696,7 +696,8 @@ async def sfm_render(path: str = "", kind: str = "images", format: str = "",
     ambient_occlusion switch those passes (off = much faster previews).
     show=True returns the last rendered image (JPEG, 768 px) for checking.
     The document is not saved: SFM's "save changes?" question is answered
-    "Continue without Saving"; the export settings are remembered in it."""
+    "Continue without Saving", and the user's Export Movie settings are put
+    back afterwards."""
     import glob
 
     if kind not in ("images", "movie", "sound"):
@@ -725,6 +726,10 @@ async def sfm_render(path: str = "", kind: str = "images", format: str = "",
                 break
         if head.get("ok") and head.get("result") is not None:
             await run_py(_call_expr("set_frame", {"frame": head["result"]}), 10, undo=False)
+        if state.get("state") in ("done", "error"):
+            # the dialog stores its choices in the session: put the user's back
+            await run_py("H.call('render_restore', '{}')", 15, undo=True,
+                         label="Claude: restore export settings")
     except BridgeError as e:
         return f"ERROR: {e}"
     if state.get("state") == "error":

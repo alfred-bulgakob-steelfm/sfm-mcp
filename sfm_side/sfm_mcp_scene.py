@@ -1455,9 +1455,49 @@ def render_start(path, kind="images", fmt=None, codec=None, width=None, height=N
                    aa=antialias, ao=ambient_occlusion, fps=_fps(), off=off,
                    audio=(False if audio is None and kind == "images" else audio),
                    start=start, end=end)
+    _RENDER["saved"] = [_snapshot(el) for el in _export_settings()]
     QtCore.QMetaObject.invokeMethod(act, "trigger", QtCore.Qt.QueuedConnection)
     QtCore.QTimer.singleShot(200, lambda: _render_step(0))
     return {"started": True, "path": _s(path)}
+
+
+def _export_settings():
+    """The session elements the Export Movie dialog writes its choices to."""
+    st = _m("sfmApp").GetDocumentRoot().GetValue("settings")
+    out = []
+    for name in ("movieSettings", "renderSettings"):
+        el = st.GetValue(name) if st is not None else None
+        if el is not None:
+            out.append(el)
+            if name == "renderSettings" and el.GetValue("ProgressiveRefinement") is not None:
+                out.append(el.GetValue("ProgressiveRefinement"))
+    return out
+
+
+def _snapshot(el):
+    vals = {}
+    a = el.FirstAttribute()
+    while a:
+        n = _s(a.GetName())
+        if n != "name" and a.GetTypeString() in ("bool", "int", "float", "string"):
+            vals[n] = el.GetValue(n)
+        a = a.NextAttribute()
+    return vals
+
+
+def render_restore():
+    """Put the Export Movie settings back as they were before render_start
+    (run inside an undo scope)."""
+    saved = _RENDER.pop("saved", None)
+    if not saved:
+        return {"restored": 0}
+    n = 0
+    for el, vals in zip(_export_settings(), saved):
+        for k, v in vals.items():
+            if el.GetValue(k) != v:
+                el.SetValue(k, _bytes(v) if isinstance(v, unicode) else v)
+                n += 1
+    return {"restored": n}
 
 
 def _render_fill(dlg):
@@ -1505,8 +1545,8 @@ def _render_fill(dlg):
         edits[4].editingFinished.emit()
     for label, val in (("Depth Of Field", R["dof"]), ("Motion Blur", R["mb"]),
                        ("Subpixel Jitter Antialiasing", R["aa"]),
-                       ("Ambient Occlusion", R["ao"]), ("Separate WAV file", R["audio"]),
-                       ("Audio", R["audio"])):
+                       ("Ambient Occlusion", R["ao"]),
+                       ("Separate WAV file" if R["kind"] == "images" else "Audio", R["audio"])):
         if val is None:
             continue
         for cb in dlg.findChildren(QtGui.QCheckBox):
@@ -1579,4 +1619,5 @@ PUBLIC = ("head_frame", "animsets", "controls", "get_transform", "keys",
           "sequences", "apply_animation", "pose", "animate", "joints",
           "set_frame", "viewport_rect", "add_element", "light", "create_model",
           "render_poll", "shift", "save_copy",
-          "undo", "undo_state", "render_start", "ctx_start", "ctx_poll")
+          "undo", "undo_state", "render_start", "ctx_start", "ctx_poll",
+          "render_restore")
