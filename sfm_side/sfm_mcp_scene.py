@@ -1201,7 +1201,7 @@ def ctx_start(code, label=None, animset=None):
     names = [_s(m.data(m.index(r, 0))) for r in range(m.rowCount())]
     if not names:
         raise ValueError("the shot has no animation sets yet: add any element "
-                         "first (sfm_light / sfm_camera_new) so the menu exists")
+                         "first (sfm_light or sfm_camera with create=True) so the menu exists")
     row = names.index(animset) if animset in names else 0
     idx = m.index(row, 0)
     r = tv.visualRect(idx)
