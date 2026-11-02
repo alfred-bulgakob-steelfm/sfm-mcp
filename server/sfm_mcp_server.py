@@ -79,7 +79,7 @@ def _steam_libraries() -> list[Path]:
         libs.append(steam)
         vdf = steam / "steamapps" / "libraryfolders.vdf"
         if vdf.is_file():
-            for m in re.finditer(r'"path"\s+"([^"]+)"', vdf.read_text(errors="ignore")):
+            for m in re.finditer(r'"path"\s+"([^"]+)"', vdf.read_text(encoding="utf-8", errors="ignore")):
                 libs.append(Path(m.group(1).replace("\\\\", "\\")))
     return libs
 
