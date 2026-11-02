@@ -23,13 +23,12 @@ from sfm_mcp_server import HOOK_MARK, SFM_SIDE, sfm_game_dir  # noqa: E402
 END_MARK = "# <<< sfm-mcp bridge <<<"
 
 
-def hook_block() -> str:
+def hook_block(eol: str = "\n") -> str:
     # Pure ASCII: SFM's Python 2.7 refuses a whole source file that has a
     # non-ASCII byte and no coding line (PEP 263), so the path is written as
     # a u"" literal with \u escapes and encoded for the file system at runtime.
     side = str(SFM_SIDE).encode("unicode_escape").decode("ascii")
-    return f"""
-{HOOK_MARK}
+    return f"""{HOOK_MARK}
 # Starts the sfm-mcp bridge (127.0.0.1, token-protected). Remove this block
 # or run install_bridge.py --uninstall to disable it.
 try:
@@ -47,18 +46,32 @@ except Exception:
     import traceback as _sfmmcp_tb
     _sfmmcp_tb.print_exc()
 {END_MARK}
-"""
+""".replace("\n", eol)
+
+
+def add_hook(text: str) -> str:
+    """Append the hook, in the file's own line-ending style; strip_hook()
+    gives `text` back byte for byte (if it is empty or ends with a newline)."""
+    eol = "\r\n" if "\r\n" in text else "\n"
+    sep = eol if text and not text.endswith("\n") else ""
+    return text + sep + hook_block(eol)
 
 
 def strip_hook(text: str) -> str:
-    if HOOK_MARK not in text:
+    """Remove exactly the marked block (start marker to end-marker line)."""
+    i = text.find(HOOK_MARK)
+    if i < 0:
         return text
-    head, _, rest = text.partition(HOOK_MARK)
-    if END_MARK not in rest:
+    j = text.find(END_MARK, i)
+    if j < 0:
         # Without the end marker everything after the start marker would go.
         raise ValueError("sfm-mcp end marker is missing; remove the block by hand")
-    _, _, tail = rest.partition(END_MARK)
-    return head.rstrip("\n") + "\n" + tail.lstrip("\n")
+    j += len(END_MARK)
+    for nl in ("\r\n", "\n"):
+        if text.startswith(nl, j):
+            j += len(nl)
+            break
+    return text[:i] + text[j:]
 
 
 def main() -> int:
@@ -76,9 +89,9 @@ def main() -> int:
     menu_src = SFM_SIDE / "menu"
     animset_dir = init.parent / "animset"
     animset_src = SFM_SIDE / "menu_animset"
-    # latin-1 maps every byte to one char and back: the user's own code in
-    # sfm_init.py keeps its exact bytes whatever its encoding.
-    text = init.read_text(encoding="latin-1") if init.is_file() else ""
+    # Bytes in, bytes out (no newline translation); latin-1 maps every byte to
+    # one char and back, so the user's own code keeps its exact bytes.
+    text = init.read_bytes().decode("latin-1") if init.is_file() else ""
 
     if "--status" in sys.argv:
         print(f"{init}: hook {'INSTALLED' if HOOK_MARK in text else 'not installed'}")
@@ -102,7 +115,7 @@ def main() -> int:
         if HOOK_MARK not in text:
             print("hook not installed")
             return 0
-        init.write_text(stripped, encoding="latin-1", newline="\n")
+        init.write_bytes(stripped.encode("latin-1"))
         print(f"hook removed from {init}")
         return 0
 
@@ -119,8 +132,7 @@ def main() -> int:
     if init.is_file() and not backup.exists():
         shutil.copy2(init, backup)
         print(f"backup -> {backup}")
-    new = stripped.rstrip("\n") + "\n" + hook_block()
-    init.write_text(new, encoding="latin-1", newline="\n")
+    init.write_bytes(add_hook(stripped).encode("latin-1"))
     print(f"hook installed -> {init}")
     try:  # SFM's Python 2.7 imports only from paths in the ANSI code page
         str(SFM_SIDE).encode("mbcs")
