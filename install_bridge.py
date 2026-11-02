@@ -23,14 +23,21 @@ from sfm_mcp_server import HOOK_MARK, SFM_SIDE, sfm_game_dir  # noqa: E402
 END_MARK = "# <<< sfm-mcp bridge <<<"
 
 
-def hook_block() -> str:
-    return f"""
-{HOOK_MARK}
+def hook_block(eol: str = "\n") -> str:
+    # Pure ASCII: SFM's Python 2.7 refuses a whole source file that has a
+    # non-ASCII byte and no coding line (PEP 263), so the path is written as
+    # a u"" literal with \u escapes and encoded for the file system at runtime.
+    side = str(SFM_SIDE).encode("unicode_escape").decode("ascii")
+    return f"""{HOOK_MARK}
 # Starts the sfm-mcp bridge (127.0.0.1, token-protected). Remove this block
 # or run install_bridge.py --uninstall to disable it.
 try:
     import sys as _sfmmcp_sys
-    _sfmmcp_dir = r"{SFM_SIDE}"
+    _sfmmcp_dir = u"{side}"
+    try:
+        _sfmmcp_dir = _sfmmcp_dir.encode(_sfmmcp_sys.getfilesystemencoding() or "mbcs")
+    except UnicodeError:
+        pass
     if _sfmmcp_dir not in _sfmmcp_sys.path:
         _sfmmcp_sys.path.insert(0, _sfmmcp_dir)
     import sfm_mcp_bridge
@@ -39,15 +46,32 @@ except Exception:
     import traceback as _sfmmcp_tb
     _sfmmcp_tb.print_exc()
 {END_MARK}
-"""
+""".replace("\n", eol)
+
+
+def add_hook(text: str) -> str:
+    """Append the hook, in the file's own line-ending style; strip_hook()
+    gives `text` back byte for byte (if it is empty or ends with a newline)."""
+    eol = "\r\n" if "\r\n" in text else "\n"
+    sep = eol if text and not text.endswith("\n") else ""
+    return text + sep + hook_block(eol)
 
 
 def strip_hook(text: str) -> str:
-    if HOOK_MARK not in text:
+    """Remove exactly the marked block (start marker to end-marker line)."""
+    i = text.find(HOOK_MARK)
+    if i < 0:
         return text
-    head, _, rest = text.partition(HOOK_MARK)
-    _, _, tail = rest.partition(END_MARK)
-    return head.rstrip("\n") + "\n" + tail.lstrip("\n")
+    j = text.find(END_MARK, i)
+    if j < 0:
+        # Without the end marker everything after the start marker would go.
+        raise ValueError("sfm-mcp end marker is missing; remove the block by hand")
+    j += len(END_MARK)
+    for nl in ("\r\n", "\n"):
+        if text.startswith(nl, j):
+            j += len(nl)
+            break
+    return text[:i] + text[j:]
 
 
 def main() -> int:
@@ -65,12 +89,20 @@ def main() -> int:
     menu_src = SFM_SIDE / "menu"
     animset_dir = init.parent / "animset"
     animset_src = SFM_SIDE / "menu_animset"
-    text = init.read_text(encoding="utf-8", errors="replace") if init.is_file() else ""
+    # Bytes in, bytes out (no newline translation); latin-1 maps every byte to
+    # one char and back, so the user's own code keeps its exact bytes.
+    text = init.read_bytes().decode("latin-1") if init.is_file() else ""
 
     if "--status" in sys.argv:
         print(f"{init}: hook {'INSTALLED' if HOOK_MARK in text else 'not installed'}")
         print(f"backup: {backup if backup.exists() else 'none'}")
         return 0
+
+    try:
+        stripped = strip_hook(text)
+    except ValueError as e:
+        print(f"{init}: {e}")
+        return 1
 
     if "--uninstall" in sys.argv:
         if menu_dir.is_dir():
@@ -83,7 +115,7 @@ def main() -> int:
         if HOOK_MARK not in text:
             print("hook not installed")
             return 0
-        init.write_text(strip_hook(text), encoding="utf-8", newline="\n")
+        init.write_bytes(stripped.encode("latin-1"))
         print(f"hook removed from {init}")
         return 0
 
@@ -100,9 +132,13 @@ def main() -> int:
     if init.is_file() and not backup.exists():
         shutil.copy2(init, backup)
         print(f"backup -> {backup}")
-    new = strip_hook(text).rstrip("\n") + "\n" + hook_block()
-    init.write_text(new, encoding="utf-8", newline="\n")
+    init.write_bytes(add_hook(stripped).encode("latin-1"))
     print(f"hook installed -> {init}")
+    try:  # SFM's Python 2.7 imports only from paths in the ANSI code page
+        str(SFM_SIDE).encode("mbcs")
+    except (UnicodeEncodeError, LookupError):
+        print(f"WARNING: SFM cannot load the bridge from {SFM_SIDE}; move this folder "
+              "to a plain path such as C:\\Tools\\sfm-mcp and run the installer again.")
     print("Restart SFM to activate.")
     return 0
 

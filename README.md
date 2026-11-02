@@ -105,6 +105,8 @@ scripts and the Claude Code entry), then delete the folder.
 - `tests/e2e_client.py`: `.venv\Scripts\python.exe tests\e2e_client.py sfm_status '{}'`
   calls one tool through a real MCP client. Without arguments it runs a smoke test.
 - `tests/fake_sfm_qt.py`: offline bridge test using SFM's Python and Qt.
+- `tests/test_install.py`: offline installer tests on a throwaway fake SFM folder:
+  `.venv\Scripts\python.exe -m unittest discover -s tests -v`.
 
 Hard-won SFM scripting facts are in the code comments. For example,
 `log.GetValue()` returns a reused buffer, `SetKey` deletes later keys,

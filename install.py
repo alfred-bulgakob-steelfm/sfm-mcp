@@ -96,12 +96,20 @@ def register(sfm_dir: str | None) -> None:
     print(json.dumps(conf, indent=2))
 
 
-def uninstall() -> int:
+def uninstall(extra: list[str]) -> int:
+    ok = False
     if VPY.is_file():
-        run([str(VPY), str(ROOT / "install_bridge.py"), "--uninstall"], check=False)
+        ok = run([str(VPY), str(ROOT / "install_bridge.py"), "--uninstall", *extra],
+                 check=False).returncode == 0
+    else:
+        print("  .venv is missing, so the SFM hook could not be checked.")
     claude = claude_cmd()
     if claude:
         run([claude, "mcp", "remove", NAME, "--scope", "user"], check=False)
+    if not ok:
+        print("\nThe SFM hook was NOT removed. Run again with --sfm-dir \"...\\SourceFilmmaker\\game\",")
+        print("or delete the '# >>> sfm-mcp bridge >>>' block from usermod\\scripts\\sfm\\sfm_init.py.")
+        return 1
     print("Uninstalled. You can delete this folder now.")
     return 0
 
@@ -115,10 +123,10 @@ def main() -> int:
         print(f"Python 3.11+ is needed (this is {sys.version.split()[0]}). "
               "Get it from https://www.python.org/downloads/ and run: py -3 install.py")
         return 1
-    if "--uninstall" in sys.argv:
-        return uninstall()
     sfm_dir = arg_value("--sfm-dir")
     extra = ["--sfm-dir", sfm_dir] if sfm_dir else []
+    if "--uninstall" in sys.argv:
+        return uninstall(extra)
     make_venv()
     if not install_bridge(extra):
         print("\nSFM was not found. Run again with --sfm-dir \"...\\SourceFilmmaker\\game\"")
