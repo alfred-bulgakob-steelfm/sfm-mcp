@@ -101,10 +101,25 @@ def _channels_clip(shot, aset):
     tg = shot.FindTrackGroup("channelTrackGroup")
     if tg is None:
         return None
-    for tr in tg.tracks:
-        for c in tr.children:
-            if _s(c.GetName()) == _s(aset.GetName()):
+    clips = [c for tr in tg.tracks for c in tr.children]
+    for c in clips:
+        if _s(c.GetName()) == _s(aset.GetName()):
+            return c
+    # A renamed animation set keeps its clip's old name (e.g. "camera1"):
+    # find the clip that owns one of its channels instead.
+    ch = _any_channel(aset)
+    if ch is not None:
+        for c in clips:
+            if c.HasAttribute("channels") and any(_same(x, ch) for x in c.channels):
                 return c
+    return None
+
+
+def _any_channel(aset):
+    for c in aset.controls:
+        for an in ("positionChannel", "channel", "leftvaluechannel"):
+            if c.HasAttribute(an) and c.GetValue(an) is not None:
+                return c.GetValue(an)
     return None
 
 
