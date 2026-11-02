@@ -178,6 +178,7 @@ def _exec_code(code, undo=True, label=None):
     old_out, old_err = sys.stdout, sys.stderr
     sys.stdout = sys.stderr = out
     result = None
+    ok, err = False, None
     try:
         tree = ast.parse(code, "<sfm-mcp>", "exec")
         last = None
@@ -189,7 +190,9 @@ def _exec_code(code, undo=True, label=None):
             expr = ast.Expression(last.value)
             result = eval(compile(expr, "<sfm-mcp>", "eval"), ns)
         ok, err = True, None
-    except Exception:
+    except BaseException:
+        # Also SystemExit (exit(), sys.exit()): escaping into the Qt timer
+        # slot, it ends the whole SFM process and its unsaved work.
         ok, err = False, traceback.format_exc()
     finally:
         sys.stdout, sys.stderr = old_out, old_err

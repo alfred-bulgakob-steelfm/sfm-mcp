@@ -734,7 +734,7 @@ async def sfm_render(path: str = "", kind: str = "images", format: str = "",
         return f"ERROR: {e}"
     if state.get("state") == "error":
         return "ERROR: " + str(state.get("error"))
-    files = sorted(f for f in glob.glob(str(out) + "*")
+    files = sorted(f for f in glob.glob(glob.escape(str(out)) + "*")
                    if not f.lower().endswith((".txt", ".wav")) or kind == "sound")
     if state.get("state") != "done":
         return f"ERROR: render still running after {timeout:.0f}s; {len(files)} file(s) so far"
